@@ -1,0 +1,28 @@
+﻿{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "ModularAbilityComponent",
+	"Description": "",
+	"Category": "Other",
+	"CreatedBy": "Stalker7274",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "ModularAbilityComponent",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+    "PostBuildSteps": {
+      "Linux": [
+        "cp {PLUGIN_DIR}/Binaries/Linux/*.so {PROJECT_DIR}/Binaries/Linux/"
+      ]
+    }
+}
