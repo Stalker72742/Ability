@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
+#include "StructUtils/InstancedStruct.h"
 #include "Attribute.generated.h"
 
 /**
@@ -17,147 +18,73 @@ struct FAttribute
     FAttribute() {}
 };
 
-// ---------------------------------------------------------------------------
-// Health
-// ---------------------------------------------------------------------------
-
-/**
- * @brief Simple flat health: current/max with alive check.
- */
-USTRUCT(BlueprintType)
-struct FHealth : public FAttribute
+USTRUCT(BlueprintType, Blueprintable)
+struct FAttributeContainer
 {
     GENERATED_BODY()
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Params")
-    float CurrentHealth = 100.0f;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Params")
-    float MaxHealth = 100.0f;
-
-    FHealth() {}
-
-    virtual bool IsAlive() const
+    
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Params")
+    FGameplayTag AttributeTag;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(BaseStruct="Attribute"), Category="Config")
+    FInstancedStruct Data;
+    
+    FAttributeContainer(const FGameplayTag& InAttributeTag)
     {
-        return CurrentHealth > 0.0f;
+        AttributeTag = InAttributeTag;
+        Data = FInstancedStruct();
+    }
+    
+    FAttributeContainer()
+    {
+        AttributeTag = FGameplayTag();
+        Data = FInstancedStruct();
+    }
+    
+    friend uint32 GetTypeHash(const FAttributeContainer& InContainer)
+    {
+        return GetTypeHash(InContainer.AttributeTag);
+    }
+    
+    template<typename T>
+    T* GetAs()
+    {
+        static_assert(TIsDerivedFrom<T, FAttribute>::Value, "T must derive from FAttribute");
+        return const_cast<T*>(Data.GetPtr<T>());
     }
 
-    void ApplyDamage(float InAmount)
+    template<typename T>
+    const T* GetAs() const
     {
-        CurrentHealth = FMath::Clamp(CurrentHealth - InAmount, 0.0f, MaxHealth);
+        static_assert(TIsDerivedFrom<T, FAttribute>::Value, "T must derive from FAttribute");
+        return Data.GetPtr<T>();
     }
-
-    void ApplyHeal(float InAmount)
-    {
-        CurrentHealth = FMath::Clamp(CurrentHealth + InAmount, 0.0f, MaxHealth);
-    }
+    
+    bool operator==(const FAttributeContainer& Other) const { return AttributeTag == Other.AttributeTag; }
+    bool operator==(const FGameplayTag& Other) const { return AttributeTag == Other; }
+    bool operator!=(const FAttributeContainer& Other) const { return AttributeTag != Other.AttributeTag; }
+    
+    bool IsValid() const { return AttributeTag.IsValid(); }
 };
 
-// ---------------------------------------------------------------------------
-// ModularHealth (per-bone)
-// ---------------------------------------------------------------------------
-
-/**
- * @brief Per-bone health map. IsAlive = all bones above 0.
- */
 USTRUCT(BlueprintType)
-struct FModularHealth : public FHealth
+struct FFloatAttribute : public FAttribute
 {
     GENERATED_BODY()
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Params")
-    TMap<FName, FGameplayTag> BonesDictionary;
+    float CurrentValue {100.0f};
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Params")
-    TMap<FGameplayTag, float> BonesWithHealth;
+    FVector2D MinMaxValue {0.0f, 100.0f};
 
-    FModularHealth() {}
-
-    virtual bool IsAlive() const override
+    FFloatAttribute()
     {
-        for (const TPair<FGameplayTag, float>& pair : BonesWithHealth)
-        {
-            if (pair.Value <= 0.0f)
-            {
-                return false;
-            }
-        }
-        return true;
+        
     }
-
-    void ApplyDamageToBone(float InAmount, FName InBone)
+    
+    void operator-=(const float& Value)
     {
-        const FGameplayTag* boneTag = BonesDictionary.Find(InBone);
-        if (!boneTag)
-        {
-            return;
-        }
-
-        float* current = BonesWithHealth.Find(*boneTag);
-        if (!current)
-        {
-            return;
-        }
-
-        *current = FMath::Max(0.0f, *current - InAmount);
-    }
-
-    float GetBoneHealth(FName InBone) const
-    {
-        const FGameplayTag* boneTag = BonesDictionary.Find(InBone);
-        if (!boneTag)
-        {
-            return 0.0f;
-        }
-
-        const float* value = BonesWithHealth.Find(*boneTag);
-        return value ? *value : 0.0f;
-    }
-};
-
-// ---------------------------------------------------------------------------
-// Stamina
-// ---------------------------------------------------------------------------
-
-/**
- * @brief Simple stamina attribute with current/max values.
- */
-USTRUCT(BlueprintType)
-struct FStaminaAttribute : public FAttribute
-{
-    GENERATED_BODY()
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Params")
-    float CurrentStamina = 100.0f;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Params")
-    float MaxStamina = 100.0f;
-
-    FStaminaAttribute() {}
-
-    /**
-     * @brief Returns true if there is enough stamina to spend InCost.
-     */
-    bool CanSpend(float InCost) const
-    {
-        return CurrentStamina >= InCost;
-    }
-
-    /**
-     * @brief Spends InCost stamina. Returns false if not enough stamina.
-     */
-    bool Spend(float InCost)
-    {
-        if (!CanSpend(InCost))
-        {
-            return false;
-        }
-        CurrentStamina = FMath::Clamp(CurrentStamina - InCost, 0.0f, MaxStamina);
-        return true;
-    }
-
-    void Restore(float InAmount)
-    {
-        CurrentStamina = FMath::Clamp(CurrentStamina + InAmount, 0.0f, MaxStamina);
+        CurrentValue -= Value;
     }
 };

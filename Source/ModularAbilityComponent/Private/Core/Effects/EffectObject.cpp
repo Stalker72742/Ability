@@ -1,8 +1,8 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-#include "Effects/EffectObject.h"
+#include "Core/Effects/EffectObject.h"
 
-#include "Ability/AbilityComponent.h"
+#include "Core/AbilityComponent.h"
 #include "Data/Effects/EffectData.h"
 
 UEffectObject::UEffectObject(const FObjectInitializer& ObjectInitializer)
@@ -72,6 +72,6 @@ void UEffectObject::ApplyModifiers()
 
 	for (const FEffectModifier& modifier : EffectData->GetModifiers())
 	{
-		OwnerComponent->ApplyEffectModifier(modifier);
+		
 	}
 }
