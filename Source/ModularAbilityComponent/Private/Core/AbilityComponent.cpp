@@ -5,6 +5,7 @@
 #include "Data/Effects/EffectData.h"
 #include "Data/Misc/GameplayTags.h"
 #include "Engine/DamageEvents.h"
+#include "Net/UnrealNetwork.h"
 
 UAbilityComponent::UAbilityComponent(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -15,18 +16,25 @@ UAbilityComponent::UAbilityComponent(const FObjectInitializer& ObjectInitializer
     SetIsReplicatedByDefault(true);
 }
 
+void UAbilityComponent::OnRep_Attributes()
+{
+    OnAttributesReplicated.Broadcast(Attributes);
+}
+
 void UAbilityComponent::ApplyDamage(float InDamage)
 {
-    auto health = GetAttribute(HealthAttribute);
-    if (!health)
+    FAttributeContainer health;
+    const bool result = GetAttribute(HealthAttribute, health);
+    if (!result)
     {
         return;
     }
-    
-    auto healthData = health->GetAs<FFloatAttribute>();
-    if (healthData)
+
+    if (auto healthData = health.GetAs<FFloatAttribute>())
     {
         *healthData -= InDamage;
+        
+        SetAttributeCurrentValue(HealthAttribute, healthData->CurrentValue);
         
         if (healthData->CurrentValue <= 0.0f)
         {
@@ -34,7 +42,7 @@ void UAbilityComponent::ApplyDamage(float InDamage)
             OnDeath.Broadcast();
         }
         
-        OnAttributeChanged.Broadcast(*health);
+        OnAttributeChanged.Broadcast(health);
     }
 }
 
@@ -47,10 +55,18 @@ void UAbilityComponent::Activate(bool bReset)
 void UAbilityComponent::Deactivate()
 {
     Super::Deactivate();
+    
+}
+
+void UAbilityComponent::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    
+    DOREPLIFETIME(UAbilityComponent, Attributes);
 }
 
 void UAbilityComponent::HandleDamageEvent(float InDamageAmount, struct FDamageEvent const& InDamageEvent,
-    class AController* InEventInstigator, AActor* InDamageCauser)
+                                          class AController* InEventInstigator, AActor* InDamageCauser)
 {
     if (!IsAlive() || InDamageAmount <= 0.0f)
     {
@@ -87,25 +103,48 @@ void UAbilityComponent::RemoveState(FGameplayTag InState)
     States.RemoveTag(InState);
 }
 
+void UAbilityComponent::SetAttributeCurrentValue(FGameplayTag InAttributeTag, float InValue)
+{
+    for (FAttributeContainer& Attribute : Attributes)
+    {
+        if (Attribute.AttributeTag == InAttributeTag)
+        {
+            if (auto attribute = Attribute.GetAs<FFloatAttribute>())
+            {
+                attribute->CurrentValue = FMath::Clamp(InValue, attribute->MinMaxValue.X, attribute->MinMaxValue.Y);
+            }
+            
+            return;
+        }
+    }
+}
+
 bool UAbilityComponent::IsAlive() const
 {
-    if (auto attribute = Attributes.Find(FAttributeContainer(HealthAttribute)))
+    for (const FAttributeContainer& Attribute : Attributes)
     {
-        if (auto health = attribute->GetAs<FFloatAttribute>())
+        if (Attribute.AttributeTag == HealthAttribute)
         {
-            return health->CurrentValue > 0.0f;
+            if (const auto health = Attribute.GetAs<FFloatAttribute>())
+            {
+                return health->CurrentValue > 0.0f;
+            }
         }
     }
     
     return true;
 }
 
-FAttributeContainer* UAbilityComponent::GetAttribute(FGameplayTag InAttributeTag) const
+bool UAbilityComponent::GetAttribute(FGameplayTag InAttributeTag, FAttributeContainer& OutAttribute) const
 {
-    if (auto attribute = Attributes.Find(InAttributeTag))
+    for (const FAttributeContainer& Attribute : Attributes)
     {
-        return const_cast<FAttributeContainer*>(attribute);
+        if (Attribute.AttributeTag == InAttributeTag)
+        {
+            OutAttribute = Attribute;
+            return true;
+        }
     }
     
-    return nullptr;
+    return false;
 }

@@ -8,16 +8,10 @@
 #include "Data/Attribute.h"
 #include "AbilityComponent.generated.h"
 
-class UEffectObject;
-class UEffectData;
-struct FEffectModifier;
 struct FDamageEvent;
 
-
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDeath);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnHealthChanged, float, InNewHealth);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnStaminaChanged, float, InNewStamina);
-
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAttributesReplicated, const TArray<FAttributeContainer>&, InAttributes);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAttributeChanged, const FAttributeContainer&, InAttribute);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTakeDamage, const FHitResult&, InHitResult);
 
@@ -30,13 +24,18 @@ public:
 
 protected:
     
-    UPROPERTY(EditAnywhere, Category="Config")
-    TSet<FAttributeContainer> Attributes;
+    UPROPERTY(EditAnywhere, ReplicatedUsing=OnRep_Attributes, Category="Config")
+    TArray<FAttributeContainer> Attributes;
 
 protected:
     
     UPROPERTY(EditAnywhere, Category="Params")
     FGameplayTagContainer States;
+    
+protected:
+    
+    UFUNCTION()
+    virtual void OnRep_Attributes();
     
 protected:
     
@@ -46,6 +45,7 @@ public:
     
     virtual void Activate(bool bReset = false) override;
     virtual void Deactivate() override;
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 public:
     
@@ -70,31 +70,38 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category="Ability|States")
     virtual void RemoveState(FGameplayTag InState);
+    
+    UFUNCTION(BlueprintCallable, Category="Setter")
+    virtual void SetAttributeCurrentValue(FGameplayTag InAttributeTag, float InValue);
 
 public:
     
     /** @brief Returns true if the pawn is alive. */
-    UFUNCTION(BlueprintPure, Category="Ability|Health")
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category="Getter")
     FORCEINLINE bool IsAlive() const;
 
     /** @brief Returns the current gameplay state tag container. */
-    UFUNCTION(BlueprintPure, Category="Ability|States")
+    UFUNCTION(BlueprintPure, Category="Getter")
     FORCEINLINE FGameplayTagContainer GetStates() const { return States; }
 
     /**
      * @brief Returns true if the owner currently has the given state tag.
      * @param InState  Tag to check.
      */
-    UFUNCTION(BlueprintPure, Category="Ability|States")
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category="Getter")
     bool HasState(FGameplayTag InState) const { return States.HasTag(InState); }
     
-    FAttributeContainer* GetAttribute(FGameplayTag InAttributeTag) const;
+    UFUNCTION(BlueprintCallable, BlueprintPure, DisplayName="GetAttribute", Category="Getter")
+    bool GetAttribute(FGameplayTag InAttributeTag, FAttributeContainer& OutAttribute) const;
 
 public:
     
     /** @brief Fired once when the pawn's health reaches zero. */
     UPROPERTY(BlueprintAssignable, Category="Events")
     FOnDeath OnDeath;
+    
+    UPROPERTY(BlueprintAssignable, Category="Events")
+    FAttributesReplicated OnAttributesReplicated;
     
     UPROPERTY(BlueprintAssignable, Category="Events")
     FAttributeChanged OnAttributeChanged;
